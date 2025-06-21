@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from teamName import getMyPosition as getPosition
+from testing import getMyPosition as getPosition
 
 nInst = 0
 nt = 0
@@ -15,7 +15,7 @@ def loadPrices(fn):
     (nt,nInst) = df.shape
     return (df.values).T
 
-pricesFile="./priceSlice_test.txt"
+pricesFile= "./prices.txt"   # "./priceSlice_test.txt"
 prcAll = loadPrices(pricesFile)
 print ("Loaded %d instruments for %d days" % (nInst, nt))
 
@@ -62,9 +62,19 @@ def calcPL(prcHist, numTestDays):
         annSharpe = np.sqrt(249) * plmu / plstd
     return (plmu, ret, plstd, annSharpe, totDVolume)
 
+# Calculate test period (80% to 100% of data)
+total_days = nt
+test_start = int(total_days * 0.8)
+test_days = total_days - test_start
 
+print(f"Total days in dataset: {total_days}")
+print(f"Test period: days {test_start} to {total_days} ({test_days} days)")
+print(f"Using final 20% of data for evaluation")
 
-(meanpl, ret, plstd, sharpe, dvol) = calcPL(prcAll,200)
+# Use test data for evaluation
+# calcPL will evaluate on the LAST test_days of the provided price data (final 20%)
+(meanpl, ret, plstd, sharpe, dvol) = calcPL(prcAll, test_days)
+
 score = meanpl - 0.1*plstd
 print ("=====")
 print ("mean(PL): %.1lf" % meanpl)
