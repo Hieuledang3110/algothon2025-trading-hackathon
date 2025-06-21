@@ -493,6 +493,8 @@ def getMyPosition(prcSoFar):
     # 5. Final position limit check
     final_positions = np.clip(final_positions, -position_limits, position_limits)
     
+
+    print(final_positions)
     return final_positions
 
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python
+#This is Eric's branch, the main algorithm is located inside test.py
 
 import numpy as np
 import pandas as pd
-from testing import getMyPosition as getPosition
+from test import getMyPosition as getPosition
 
 nInst = 0
 nt = 0
