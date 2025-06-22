@@ -1,4 +1,5 @@
 # Brief
+Kelvin's version
 
 Make the best trading algorithm!
 
