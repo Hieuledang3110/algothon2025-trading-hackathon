@@ -37,6 +37,10 @@ def getMyPosition(data):
         midTermLength = 89
         shortTermLength = 29
 
+        upTrendTolerance = 1.05
+        downTrendTolerance = 0.941
+        
+
         #Getting the average price during the last shotTermLength days
         if iLast < shortTermLength:
             recentPrices = data
@@ -60,9 +64,9 @@ def getMyPosition(data):
             historicalPrice = prices[0]
         else:
             historicalPrice = prices[-midTermLength]
-        if currentPrice < historicalPrice*0.85:
+        if currentPrice < historicalPrice*downTrendTolerance:
             isTrendingDown = True
-        elif currentPrice > historicalPrice*1.05:
+        elif currentPrice > historicalPrice*upTrendTolerance:
             isTrendingUp = True
             
         #Checking how far away the current price is from the short term average
@@ -70,15 +74,15 @@ def getMyPosition(data):
         devianceFactor = max(min(devianceFactor,1),-1)  #clamp between -1,1
 
         #It seems that full sending when buying is the most profitable bruh. This might be partially due to the savings from comissions
-        if (devianceFactor > 0.33):
-            if (devianceFactor < 0.54):
+        if (devianceFactor > 0.329):
+            if (devianceFactor < 0.541):
                 buyFactor = (devianceFactor+1)/0.54
                 buyFactor = 1
         #It seems that being cautious with shorting is important, possibly because potential for downside is greater than potential for upside
         #Here, we short if the stock is moderately down AND is down since midTermLength days ago.
-        if (devianceFactor < -0.3 and isTrendingDown):
-            if (devianceFactor > -0.64):
-                buyFactor = -(devianceFactor-0.3)/0.64
+        if (devianceFactor < -0.145 and isTrendingDown):
+            if (devianceFactor > -0.52):
+                buyFactor = -(devianceFactor-0.38)/0.52
         
         buyAmount = maxDollarPosition*buyFactor
         sharePosition = buyAmount/currentPrice
