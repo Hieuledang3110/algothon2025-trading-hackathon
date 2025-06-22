@@ -29,38 +29,56 @@ def getMyPosition(data):
     # data = np.rot90(data)
     positions = []
 
-
     maxDollarPosition = 10000
-
-    #As a greedy I should disable this strategy if I think price movement is too extreme
 
     for prices in data:
         iLast = len(prices)
 
-        #Getting the average price during the last 30 days
-        if iLast < 29:
+        midTermLength = 89
+        shortTermLength = 29
+
+        #Getting the average price during the last shotTermLength days
+        if iLast < shortTermLength:
             recentPrices = data
         else:
-            recentPrices = data[:29]
+            recentPrices = data[:shortTermLength]
         averagePrice = np.average(recentPrices)
 
-        #Really shitty approximation of volatility
+        #maxVariation is a really basic approximation of each stock's volatility
         maxPrice = np.max(recentPrices)
         minPrice = np.min(recentPrices)
         maxVariation = max(np.abs(float(averagePrice-minPrice)), np.abs(float(maxPrice-averagePrice)))
 
-        #Buying if, based on average price, the stock is overvalued. 
         currentPrice = prices[-1]
         buyFactor = 0
-        
+
+        #By this definition, something is 'trending up' if their stock is up since midTermLength days ago :skull: 
+        isTrendingUp = False
+        isTrendingDown = False
+
+        if iLast < midTermLength:
+            historicalPrice = prices[0]
+        else:
+            historicalPrice = prices[-midTermLength]
+        if currentPrice < historicalPrice*0.85:
+            isTrendingDown = True
+        elif currentPrice > historicalPrice*1.05:
+            isTrendingUp = True
+            
+        #Checking how far away the current price is from the short term average
         devianceFactor = (currentPrice-averagePrice)/maxVariation
         devianceFactor = max(min(devianceFactor,1),-1)  #clamp between -1,1
+
+        #It seems that full sending when buying is the most profitable bruh. This might be partially due to the savings from comissions
         if (devianceFactor > 0.33):
             if (devianceFactor < 0.54):
-                buyFactor = (devianceFactor-0.2)/0.55
-        # if (devianceFactor < -0.4):
-        #     if (devianceFactor > -0.6):
-        #         buyFactor = (devianceFactor-0.2)/0.55
+                buyFactor = (devianceFactor+1)/0.54
+                buyFactor = 1
+        #It seems that being cautious with shorting is important, possibly because potential for downside is greater than potential for upside
+        #Here, we short if the stock is moderately down AND is down since midTermLength days ago.
+        if (devianceFactor < -0.3 and isTrendingDown):
+            if (devianceFactor > -0.64):
+                buyFactor = -(devianceFactor-0.3)/0.64
         
         buyAmount = maxDollarPosition*buyFactor
         sharePosition = buyAmount/currentPrice
