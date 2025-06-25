@@ -12,6 +12,8 @@ from importlib.machinery import ModuleSpec
 from types import ModuleType, FunctionType
 from matplotlib.axes import Axes
 
+#This is possibly broken right now. Try to use custom_eval.
+
 
 # CONSTANTS #######################################################################################
 RAW_PRICES_FILEPATH: str = "./prices.txt"
@@ -28,8 +30,8 @@ PLOT_COLORS: Dict[str, str] = {
     "sharpe_change": "#d62728",
 }
 
-default_strategy_filepath: str = "./test.py"
-default_strategy_function_name: str = "getMyPosition"
+default_strategy_filepath: str = "./alwaysBuy.py"
+default_strategy_function_name: str = "trendFollow"
 strategy_file_not_found_message: str = "Strategy file not found"
 could_not_load_spec_message: str = "Could not load spec for module from strategy file"
 strategy_function_does_not_exist_message: str = (
@@ -447,9 +449,11 @@ class Backtester:
         # Iterate through specified timeline
         for day in range(start_day, end_day + 1):
             # Get the prices so far
-            prices_so_far: ndarray = self.price_history[:, start_day - 1 : day]
+            #prices_so_far: ndarray = self.price_history[:, start_day - 1 : day]
+            prices_so_far = self.price_history[:,:day]
 
             # Get desired positions from strategy
+            print("prices_so_far: ",prices_so_far, "day: ", day)
             new_positions: ndarray = self.getMyPosition(prices_so_far)
 
             # Get today's prices

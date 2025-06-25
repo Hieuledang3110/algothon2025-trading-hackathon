@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from test import trendStrategy as getPosition
+from test_algorithms import alwaysBuy as getPosition
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 
