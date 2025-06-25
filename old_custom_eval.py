@@ -4,7 +4,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from test import breakoutStrategy as getPosition
+from test import trendFollow as getPosition
 from test import SMA
 from test import WMA
 from sklearn.linear_model import LinearRegression
@@ -14,11 +14,11 @@ from sklearn.linear_model import LinearRegression
 #Set if you want to look at the chart
 openChart = True
 #Opens up the graphs related to this stock
-stockIndex = 12
+stockIndex = 6
 #Change this to see a stock's price before the trading period begins
 headStart = 500
 #The amount of biggest losers/winners you want to see
-nStocksFeedback = 5
+nStocksFeedback = 22
 
 
 
@@ -78,7 +78,7 @@ def calcPL(prcHist, numTestDays,stockIndex,headStart,nStocksFeedback):
         if (t < nt):
             # Trading, do not do it on the very last day of the test
             newPosOrig = getPosition(prcHistSoFar)
-
+            print(newPosOrig)
             posLimits = np.array([int(x) for x in dlrPosLimit / curPrices])
             newPos = np.clip(newPosOrig, -posLimits, posLimits)
             deltaPos = newPos - curPos
@@ -90,7 +90,6 @@ def calcPL(prcHist, numTestDays,stockIndex,headStart,nStocksFeedback):
 
             #Temp addition to track position history
             for i in range(len(prcHist)):
-                if t == 743:
                 positionHistory[i].append(newPosOrig[i])
                 DailyCashHistory[i].append(float(DailyCashHistory[i][-1] - curPrices[i]*deltaPos[i] + dvolumes[i]*commRate))
 
@@ -149,7 +148,7 @@ def calcPL(prcHist, numTestDays,stockIndex,headStart,nStocksFeedback):
         prediction = smooth_trend_regression(current_data, long_window=200, smooth_window=20)
         
         # Calculate bounds
-        percentage = 0.045
+        percentage = 0.06
         upper_bound = prediction * (1 + percentage)
         lower_bound = prediction * (1 - percentage)
         
@@ -171,45 +170,22 @@ def calcPL(prcHist, numTestDays,stockIndex,headStart,nStocksFeedback):
     plt.title(f'Stock {stockIndex} - Regression Predictions')
     plt.legend()
     plt.grid(True)
-    plt.show()
 
     '''
     plt.figure(1)
     plt.title('Black = Stock Price, Orange = Position (scaled so that the max position is roughly equal to the average price of the stock)')
     plt.plot([i for i in range(startDay+1, nt+1)],positionHistory[stockIndex],color="orange", linewidth=1)
     plt.plot([i for i in range(max(startDay+1-headStart,0), nt)],prcHist[stockIndex,range(max(startDay+1-headStart,0),nt)],color="black", linewidth=1)
-    
+    '''
+
     plt.figure(2)
     plt.title('Green = Total Earnings, Red = Daily Earnings)')
     plt.plot([i for i in range(startDay+1, nt+1)],DailyPLHistory[stockIndex][:-1],color="red", linewidth=1)
     plt.plot([i for i in range(startDay+1, nt+1)],TotalPLHistory[stockIndex][:-2],color="green", linewidth=2)
     plt.plot([i for i in range(startDay+1, nt+1)],[0 for _ in range(startDay+1, nt+1)],color="grey", linewidth=1)
-    '''
-
-    biggestWinnersIndices = []
-    biggestLosersIndices = []
-    biggestWinnersPL = []
-    biggestLosersPL = []
-    FinalTotalPL = []
-    for arr in TotalPLHistory:
-        FinalTotalPL.append(arr[-1])
     
 
-    for i in range(nStocksFeedback):
-        temp = FinalTotalPL.index(max(FinalTotalPL))
-        biggestWinnersIndices.append(temp)   
-        biggestWinnersPL.append(int(FinalTotalPL[temp]))
-        FinalTotalPL[temp] = 0
-        temp = FinalTotalPL.index(min(FinalTotalPL))
-        biggestLosersIndices.append(temp)
-        biggestLosersPL.append(int(FinalTotalPL[temp]))
-        FinalTotalPL[temp] = 0
-    
-    print(f"=====")
-    print(f"Biggest Loser's indices: {biggestLosersIndices}")
-    print(f"Biggest Loser's P/L: {biggestLosersPL}")
-    print(f"Biggest Winners's indices: {biggestWinnersIndices}")
-    print(f"Biggest Winners's P/L: {biggestWinnersPL}")
+    rep
     
 
     if (plstd > 0):
@@ -219,9 +195,9 @@ def calcPL(prcHist, numTestDays,stockIndex,headStart,nStocksFeedback):
 
 # Calculate test period (80% to 100% of data)
 total_days = nt
-test_start = int(total_days * 0.8)
+test_start = int(total_days * 0.2)
 test_days = total_days - test_start
-
+ 
 print(f"Total days in dataset: {total_days}")
 print(f"Test period: days {test_start} to {total_days} ({test_days} days)")
 print(f"Using final 20% of data for evaluation")

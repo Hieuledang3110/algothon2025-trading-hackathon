@@ -1,3 +1,8 @@
+# For team members
+The custom_eval is the best eval file rn. 
+Select which stock you want to look at at the bottom of the file by changing stockID
+There should be 2 matplotlib tabs.
+
 # Brief
 
 Make the best trading algorithm!

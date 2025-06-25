@@ -296,7 +296,75 @@ def get_single_day_prediction(prices, target_day, long_window=200, smooth_window
     
     return prediction
 
-def breakoutStrategy(data):
+def trendStrategy(data):
+    positions = []
+    maxDollarPosition = 10000
+
+    for i in range(len(data)):
+        prices = data[i]
+        latestPrice = prices[-1]
+        buyFactor = 0
+        SMALength = 15
+
+
+        #smooth_predictions = []
+        #for i in range(len(prices),len(prices)+2):
+        #    smooth_predictions.append(smooth_trend_regression(prices[:i],long_window=200,smooth_window=40))
+            
+        #direction/gradient of the 30 day EMA is used to indicate the trend
+        #ema_30 = pd.Series(prices).ewm(span=45).mean()
+        #ema_30 = ema_30.values
+        #sma_of_ema = pd.Series(ema_30).rolling(4).mean()
+        #sma_of_ema = sma_of_ema.values
+        #gradient = sma_of_ema[-1] - sma_of_ema[-2]
+
+        #Alternatively use the ema of an sma of smooth predictions
+        sma_10 = pd.Series(prices).rolling(20).mean()
+        ema_of_sma = pd.Series(sma_10).ewm(span=4).mean()
+        ema_of_sma = ema_of_sma.values
+        gradient = ema_of_sma[-1] - ema_of_sma[-2]
+
+        #This is just the quick ema of smooth predictions
+        #smoother_predictions = pd.Series(smooth_predictions).ewm(span=4).mean()
+        #smoother_predictions = smoother_predictions.values
+        #gradient = smoother_predictions[-1] - smoother_predictions[-2]
+
+        #gradient = smooth_predictions[-1] - smooth_predictions[-2]
+
+        #Triple EMA
+        ema1 = pd.Series(prices).ewm(span=10).mean()
+        ema2 = ema1.ewm(span=10).mean()
+        ema3 = ema2.ewm(span=10).mean()
+        tema = 3 * ema1 - 3 * ema2 + ema3
+
+        # Create upper and lower bounds
+        percentage = 0.02  # % bands
+        upper_bound = smooth_predictions[-1] * (1 + percentage)
+        lower_bound = smooth_predictions[-1] * (1 - percentage)
+        
+        ema_4 = pd.Series(prices[-5:-1]).ewm(span=4).mean().values
+        lastEma_4 = ema_4[-1]
+
+        #If momentum and price are both above/below the prediction, start thinning positions
+        #print(i, latestPrice, ema_30[-1], gradient)
+        #if latestPrice < ema_30[-1] and gradient < 0:
+        #    buyFactor = -1
+        if gradient < 0:
+            buyFactor = -1
+        elif gradient > 0:
+            buyFactor = 1
+
+
+        buyAmount = maxDollarPosition*buyFactor
+        sharePosition = buyAmount/latestPrice
+        positions.append(int(sharePosition))
+
+        #print(i, prediction, upper_bound, lower_bound, latestPrice, buyFactor)
+
+    #print(positions)
+    return positions  
+
+def reversionStrategy(data):
     positions = []
     maxDollarPosition = 10000
 
@@ -306,25 +374,50 @@ def breakoutStrategy(data):
         buyFactor = 0
 
         prediction = smooth_trend_regression(prices, long_window=200, smooth_window=20)
+        prevPrediction = smooth_trend_regression(prices[:-1], long_window=200, smooth_window=20)
+
+        #direction/gradient of the 30 day EMA is used to indicate the trend
+        ema_30 = pd.Series(prices).ewm(span=30).mean()
+        ema_30 = ema_30.values
+        gradient = ema_30[-1] - ema_30[-2]
+
+        sma_30 = pd.Series(prices).rolling(30).mean()
+        sma_30 = sma_30.values
 
         # Create upper and lower bounds
-        percentage = 0.045  # % bands
+        percentage = 0.10  # % bands
         upper_bound = (prediction) * (1 + percentage)
         lower_bound = (prediction) * (1 - percentage)
         
+        ema_4 = pd.Series(prices[-5:-1]).ewm(span=4).mean().values
+        lastEma_4 = ema_4[-1]
 
-        if latestPrice < lower_bound:
-            buyFactor = -1
-        elif latestPrice > upper_bound:
-            buyFactor = 1
+        if i == 29:
+            print(len(prices),latestPrice,gradient)
+
+        
+        #If momentum is up, buy low sell high
+        if gradient > 0:
+            if latestPrice < prediction:
+                buyFactor = 1
+            else:
+                buyFactor = (latestPrice - prediction)/(percentage*prediction)
+        
+        #If momentum is down, short high buy low
+        if gradient < 0:
+            if latestPrice > prediction:
+                buyFactor = -1
+            else:
+                buyFactor = (latestPrice - prediction)/(percentage*prediction)
+
 
         buyAmount = maxDollarPosition*buyFactor
         sharePosition = buyAmount/latestPrice
-        positions.append(sharePosition)
+        positions.append(int(sharePosition))
 
-        print(i, prediction, upper_bound, lower_bound, latestPrice, buyFactor)
+        #print(i, prediction, upper_bound, lower_bound, latestPrice, buyFactor)
 
-    print(positions)
+    #print(positions)
     return positions  
 
 def breakoutStrategy2(prcSoFar):
@@ -383,10 +476,57 @@ def breakoutStrategy2(prcSoFar):
 
     return positions
 
+def trendFollow(data):
+    
+    positions = []
+    for i in range(len(data)):
+        stockPrices = data[i]
+        lastPrice = stockPrices[-1]
+        smaRange = 20 # Change this below as well
+        smoothingStrength = 3
+        positionLeeway = 0.00
+
+        sma_series = pd.Series(stockPrices).rolling(20).mean().dropna()
+        ema_smoothed_sma = sma_series.ewm(span=smoothingStrength).mean()
+        #print(ema_smoothed_sma, sma_series, stockPrices)
+        diff = ema_smoothed_sma.iloc[-1] - ema_smoothed_sma.iloc[-2]
+
+        prediction = smooth_trend_regression(stockPrices, long_window=200, smooth_window=20)
+
+        buyFactor = 0
+
+        #if the moving average suggests we are trending up
+        if diff > 0:
+            if prediction < lastPrice:
+                buyFactor = 1
+            elif prediction-positionLeeway < lastPrice:
+                buyFactor = (prediction-lastPrice)/positionLeeway
+            else:
+                buyFactor = 0
+        #if the moving average suggests we are trending down
+        else:
+            if prediction > lastPrice:
+                buyFactor = -1
+                buyFactor = 0
+            elif prediction+positionLeeway > lastPrice:
+                buyFactor = -(lastPrice-prediction)/positionLeeway
+                buyFactor = 0
+            else:
+                buyFactor = 0
+        
+        buyAmount = 10000*buyFactor
+        sharePosition = buyAmount/lastPrice
+        positions.append(int(sharePosition))
+
+    positions.reverse()
+    return(positions)
+
+
+
+
 data = np.loadtxt("prices.txt")
 data = np.rot90(data)
 
-print(data)
 days = list(range(1,len(data[0])+1))
 
 
@@ -409,7 +549,7 @@ plt.show()
 '''
 
 
-instrument = 12
+instrument = 6
 prices = data[instrument]
 
 # Calculate predictions from day 150 onwards
@@ -427,16 +567,17 @@ maxDifferenceConsidered = 0.05
 
 
 # Add SMA
-sma_30 = []
-for i in range(29, len(prices)):  # Start from day 30 (index 29)
-    sma_30.append(np.mean(prices[i-29:i+1]))
+smaRange = 20
+sma = []
+for i in range(smaRange-1, len(prices)):  # Start from day 30 (index 29)
+    sma.append(np.mean(prices[i-smaRange+1:i+1]))
 
 # Add EMA (e.g., 20-day EMA)
 ema_20 = pd.Series(prices).ewm(span=20).mean()
 
 
 # Or multiple EMAs for crossover strategies
-ema_12 = pd.Series(prices).ewm(span=12).mean()
+ema_12 = pd.Series(sma).ewm(span=3).mean()
 ema_4 = pd.Series(prices).ewm(span=4).mean()
 ema_26 = pd.Series(prices).ewm(span=26).mean()
 
@@ -453,9 +594,9 @@ for day in range(20, len(prices)):
     #slope, intercept, next_value1 = linear_regression_single_array(current_data[max(0,len(current_data)-300):])
     slope, intercept, next_value1 = linear_regression_single_array(ema_4[max(0,day-20):day])
     predictions1.append(next_value1)
-    difference1 = abs(sma_30[day-29]-ema_12[day])/prices[day]
-    difference2 = abs(next_value1-ema_12[day])/prices[day]
-    expansionFactor = max(difference1,difference2)*(defaultFreedomFactor)*(maxExpansionFactor)/maxDifferenceConsidered
+    #difference1 = abs(sma[day-smaRange+1]-ema_12[day])/prices[day]
+    #difference2 = abs(next_value1-ema_12[day])/prices[day]
+    #expansionFactor = max(difference1,difference2)*(defaultFreedomFactor)*(maxExpansionFactor)/maxDifferenceConsidered
     #lowerBound.append(next_value + next_value*(defaultFreedomFactor+expansionFactor))
     #upperBound.append(next_value - next_value*(defaultFreedomFactor+expansionFactor))
     lowerBound1.append(next_value1 + next_value1*(defaultFreedomFactor))
@@ -471,9 +612,9 @@ plt.plot(range(len(prices)), prices, color='black', label='Actual Prices', alpha
 #plt.plot(actual_days1, lowerBound1, 'b-', label='Lower Bound 1', markersize=2)
 #plt.plot(actual_days1, upperBound2, 'g-', label='Upper Bound 2', markersize=2)
 #plt.plot(actual_days1, lowerBound2, 'g-', label='Lower Bound 2', markersize=2)
-#plt.plot(range(29, len(prices)), sma_30, 'g-', label='30-day SMA', linewidth=2)
+plt.plot(range(smaRange-1, len(prices)), sma, 'g-', label='30-day SMA', linewidth=2)
 #plt.plot(range(len(prices)), ema_20, 'orange', label='20-day EMA', linewidth=2)
-#plt.plot(range(len(prices)), ema_12, 'cyan', label='12-day EMA')
+plt.plot(range(smaRange-1, len(prices)), ema_12, 'cyan', label='12-day EMA')
 plt.plot(range(len(prices)), ema_4, 'cyan', label='4-day EMA')
 #plt.plot(range(len(prices)), ema_26, 'magenta', label='26-day EMA')
 
@@ -485,11 +626,12 @@ actual_days = []
 for day in range(150, len(prices)):
     current_data = prices[:day]
     smooth_pred = smooth_trend_regression(current_data, long_window=200, smooth_window=20)
+        
     smooth_predictions.append(smooth_pred)
     actual_days.append(day)
 
 # Create upper and lower bounds
-percentage = 0.045  # % bands
+percentage = 0.07  # % bands
 upper_bound = np.array(smooth_predictions) * (1 + percentage)
 lower_bound = np.array(smooth_predictions) * (1 - percentage)
 
@@ -509,16 +651,18 @@ plt.title(f'Daily Price Predictions from Day 75 - Instrument {instrument}')
 plt.legend()
 plt.grid(True)
 
-# Add to plot (usually plotted separately due to 0-100 scale)
-# plt.figure(1)
-# plt.figure(figsize=(12, 4))
-# plt.plot(range(len(prices)), rsi, 'red', label='RSI')
-# plt.axhline(70, color='gray', linestyle='--', alpha=0.7)  # Overbought
-# plt.axhline(30, color='gray', linestyle='--', alpha=0.7)  # Oversold
-# plt.ylabel('RSI')
-# plt.legend()
+'''
+#Add to plot (usually plotted separately due to 0-100 scale)
+plt.figure(1)
+plt.figure(figsize=(12, 4))
+plt.plot(range(len(prices)), rsi, 'red', label='RSI')
+plt.axhline(70, color='gray', linestyle='--', alpha=0.7)  # Overbought
+plt.axhline(30, color='gray', linestyle='--', alpha=0.7)  # Oversold
+plt.ylabel('RSI')
+plt.legend()
+'''
 
-plt.show()
+#plt.show()
 
 '''
 EMAs = [[] for _ in range(len(data))]
