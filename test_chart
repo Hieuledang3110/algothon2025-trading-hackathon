@@ -1,0 +1,42 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load the data
+prcAll = np.loadtxt("prices.txt").T  # Shape: (50, 750)
+
+def get_average_price(price_data):
+   """Calculate average price across all instruments for each day"""
+   return np.mean(price_data, axis=0)
+
+# Calculate overall market average
+market_average = get_average_price(prcAll)
+
+# Create figure
+plt.figure(figsize=(15, 10))
+
+# Plot each stock with market movement filtered out
+for stock_id in range(5,10):
+   # Get this stock's prices
+   stock_prices = prcAll[stock_id]
+   
+   # Calculate average of all other stocks (excluding this one)
+   other_stocks = np.delete(prcAll, stock_id, axis=0)
+   other_average = get_average_price(other_stocks)
+   
+   # Filter out market movement: stock_prices - market_average
+   filtered_prices = stock_prices - market_average
+   
+   # Plot the market-neutral price movement
+   plt.plot(range(len(filtered_prices)), filtered_prices, alpha=0.7, linewidth=0.8)
+
+plt.title("All Stocks with Market Average Movement Filtered Out", fontsize=14)
+plt.xlabel("Days")
+plt.ylabel("Price Relative to Market Average")
+plt.grid(True, alpha=0.3)
+plt.axhline(y=0, color='black', linestyle='-', alpha=0.5, linewidth=1)
+
+# Add legend for a few stocks if you want
+plt.legend([f"Stock {i}" for i in range(5,10)], loc='upper left')
+
+plt.tight_layout()
+plt.show()

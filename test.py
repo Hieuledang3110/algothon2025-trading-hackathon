@@ -305,11 +305,26 @@ def trendStrategy(data):
         latestPrice = prices[-1]
         buyFactor = 0
         SMALength = 15
+        gradientThreshold = 0.006
 
 
-        #smooth_predictions = []
-        #for i in range(len(prices),len(prices)+2):
-        #    smooth_predictions.append(smooth_trend_regression(prices[:i],long_window=200,smooth_window=40))
+        smooth_predictions = []
+        for i in range(4):
+            if i == 0:
+                smooth_predictions.append(smooth_trend_regression(prices,long_window=200,smooth_window=5))
+            else:
+                smooth_predictions.append(smooth_trend_regression(prices[:-i],long_window=200,smooth_window=5))
+
+
+        
+        gradient = smooth_predictions[0] - smooth_predictions[1]
+        prevGradient = smooth_predictions[1] - smooth_predictions[2]
+
+        gradient /= latestPrice
+        prevGradient /= latestPrice
+
+        #print(smooth_predictions)
+        #print(smooth_predictions[-1],smooth_predictions[-2])
             
         #direction/gradient of the 30 day EMA is used to indicate the trend
         #ema_30 = pd.Series(prices).ewm(span=45).mean()
@@ -319,10 +334,10 @@ def trendStrategy(data):
         #gradient = sma_of_ema[-1] - sma_of_ema[-2]
 
         #Alternatively use the ema of an sma of smooth predictions
-        sma_10 = pd.Series(prices).rolling(20).mean()
-        ema_of_sma = pd.Series(sma_10).ewm(span=4).mean()
-        ema_of_sma = ema_of_sma.values
-        gradient = ema_of_sma[-1] - ema_of_sma[-2]
+        #sma_10 = pd.Series(prices).rolling(20).mean()
+        #ema_of_sma = pd.Series(sma_10).ewm(span=4).mean()
+        #ema_of_sma = ema_of_sma.values
+        #gradient = ema_of_sma[-1] - ema_of_sma[-2]
 
         #This is just the quick ema of smooth predictions
         #smoother_predictions = pd.Series(smooth_predictions).ewm(span=4).mean()
@@ -332,26 +347,26 @@ def trendStrategy(data):
         #gradient = smooth_predictions[-1] - smooth_predictions[-2]
 
         #Triple EMA
-        ema1 = pd.Series(prices).ewm(span=10).mean()
-        ema2 = ema1.ewm(span=10).mean()
-        ema3 = ema2.ewm(span=10).mean()
-        tema = 3 * ema1 - 3 * ema2 + ema3
+        #ema1 = pd.Series(prices).ewm(span=10).mean()
+        #ema2 = ema1.ewm(span=10).mean()
+        #ema3 = ema2.ewm(span=10).mean()
+        #tema = 3 * ema1 - 3 * ema2 + ema3
 
         # Create upper and lower bounds
-        percentage = 0.02  # % bands
-        upper_bound = smooth_predictions[-1] * (1 + percentage)
-        lower_bound = smooth_predictions[-1] * (1 - percentage)
+        #percentage = 0.02  # % bands
+        #upper_bound = smooth_predictions[-1] * (1 + percentage)
+        #lower_bound = smooth_predictions[-1] * (1 - percentage)
         
-        ema_4 = pd.Series(prices[-5:-1]).ewm(span=4).mean().values
-        lastEma_4 = ema_4[-1]
+        #ema_4 = pd.Series(prices[-5:-1]).ewm(span=4).mean().values
+        #lastEma_4 = ema_4[-1]
 
         #If momentum and price are both above/below the prediction, start thinning positions
         #print(i, latestPrice, ema_30[-1], gradient)
         #if latestPrice < ema_30[-1] and gradient < 0:
         #    buyFactor = -1
-        if gradient < 0:
+        if gradient < -gradientThreshold and gradient < prevGradient:
             buyFactor = -1
-        elif gradient > 0:
+        elif gradient > gradientThreshold and gradient > prevGradient:
             buyFactor = 1
 
 
@@ -546,7 +561,7 @@ plt.plot(days,averages, color="black", linewidth=5)
 # plt.plot(days,medians, color="red", linewidth=5)
 
 plt.show()
-'''
+
 
 
 instrument = 6
@@ -651,7 +666,7 @@ plt.title(f'Daily Price Predictions from Day 75 - Instrument {instrument}')
 plt.legend()
 plt.grid(True)
 
-'''
+
 #Add to plot (usually plotted separately due to 0-100 scale)
 plt.figure(1)
 plt.figure(figsize=(12, 4))
@@ -660,11 +675,11 @@ plt.axhline(70, color='gray', linestyle='--', alpha=0.7)  # Overbought
 plt.axhline(30, color='gray', linestyle='--', alpha=0.7)  # Oversold
 plt.ylabel('RSI')
 plt.legend()
-'''
+
 
 #plt.show()
 
-'''
+
 EMAs = [[] for _ in range(len(data))]
 for i in range(len(EMAs)):
     EMAs[i] = EMA(data[i])
