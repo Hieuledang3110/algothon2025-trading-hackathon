@@ -397,7 +397,7 @@ print ("totDvolume: %.0lf " % dvol)
 print ("Score: %.2lf" % score)
 
 #Note that PL is shown without comission fees deducted                                                  vvvvvvv
-stockID = 41
+stockID = 10
 plot_single_instrument_analysis(stockID, instrument_position_history, dvolume_history, instrument_PL_history_no_comm, instrument_value_history,instrument_cash_history, instrument_comm_history,prcAll, start_day=test_start)
 
 
