@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from test_algorithms import alwaysBuy as getPosition
+from main import alwaysBuy as getPosition
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 
@@ -26,8 +26,11 @@ def calcPL(prcHist, numTestDays):
     instrument_position_history = {i: [0] for i in range(50)}
     dvolume_history = {i: [0] for i in range(50)}
     instrument_PL_history = [[0] for _ in range(50)]
+    instrument_PL_history_no_comm = [[0] for _ in range(50)]
     instrument_value_history = [[10000] for _ in range(50)]
+    instrument_value_history_no_comm = [[10000] for _ in range(50)]
     instrument_cash_history = [[10000] for _ in range(50)]
+    instrument_cash_history_no_comm = [[10000] for _ in range(50)]
     instrument_comm_history = [[0] for i in range(50)]
     cash = 0
     curPos = np.zeros(nInst)
@@ -63,8 +66,11 @@ def calcPL(prcHist, numTestDays):
             commission = abs(DollarVolume*commRate)
             instrument_comm_history[i].append(commission)
             instrument_cash_history[i].append(instrument_cash_history[i][-1] - DollarVolume - commission)
+            instrument_cash_history_no_comm[i].append(instrument_cash_history_no_comm[i][-1] - DollarVolume)
             instrument_value_history[i].append(instrument_cash_history[i][-1]+curPrices[i]*instrument_position_history[i][-1])
+            instrument_value_history_no_comm[i].append(instrument_cash_history_no_comm[i][-1]+curPrices[i]*instrument_position_history[i][-1])
             instrument_PL_history[i].append(instrument_value_history[i][-1]-instrument_value_history[i][-2])
+            instrument_PL_history_no_comm[i].append(instrument_value_history_no_comm[i][-1]-instrument_value_history_no_comm[i][-2])
 
         curPos = np.array(newPos)
         posValue = curPos.dot(curPrices)
@@ -81,11 +87,10 @@ def calcPL(prcHist, numTestDays):
     annSharpe = 0.0
     if (plstd > 0):
         annSharpe = np.sqrt(249) * plmu / plstd
-    return (plmu, ret, plstd, annSharpe, totDVolume,instrument_position_history,dvolume_history,instrument_PL_history,instrument_value_history,instrument_cash_history,instrument_comm_history)
+    return (plmu, ret, plstd, annSharpe, totDVolume,instrument_position_history,dvolume_history,instrument_PL_history,instrument_value_history,instrument_cash_history,instrument_comm_history,instrument_PL_history_no_comm)
 
 
 def smooth_trend_regression(values, long_window=200, smooth_window=20):
-    smooth_window = 40
     # Step 1: Get long-term trend using all data
     X_all = np.arange(len(values)).reshape(-1, 1)
     long_trend = LinearRegression().fit(X_all, values)
@@ -119,7 +124,6 @@ def plot_single_instrument_analysis(instrument_id,
     cash = instrument_cash_history[instrument_id]
     commissions = instrument_comm_history[instrument_id]
     prices = price_history[instrument_id]
-    
     days = range(start_day, start_day + len(positions))
     fullDays = range(0,750)
     
@@ -134,12 +138,12 @@ def plot_single_instrument_analysis(instrument_id,
     # Color background based on P&L
     for i in range(len(days)-1):
         if i < len(pnl):
-            if pnl[i] > 0:
+            if pnl[i] > 0.0001:
                 color = 'green'
-                ax1.axvspan(days[i], days[i+1], alpha=0.1, color=color)
-            elif pnl[i] < 0:
+                ax1.axvspan(days[i-1], days[i], alpha=0.1, color=color)
+            elif pnl[i] < -0.0001:
                 color = 'red'
-                ax1.axvspan(days[i], days[i+1], alpha=0.1, color=color)
+                ax1.axvspan(days[i-1], days[i], alpha=0.1, color=color)
             # No color when pnl[i] == 0 (skip the axvspan call entirely)
     
     ax1.set_title('Stock Price with P&L Overlay')
@@ -195,19 +199,19 @@ def plot_single_instrument_analysis(instrument_id,
     ax6.grid(True, alpha=0.3)
 
     # Create second figure with technical analysis
-    fig2, ax_tech = plt.subplots(1, 1, figsize=(15, 8))
-    fig2.suptitle(f'Instrument {instrument_id} - Technical Analysis with P&L Overlay', fontsize=16)
+    fig2, (ax_tech, ax_macd) = plt.subplots(2, 1, figsize=(15, 12), gridspec_kw={'height_ratios': [3, 1]})
+    fig2.suptitle(f'Instrument {instrument_id} - Technical Analysis with PL', fontsize=16)
 
     # Plot stock price
     ax_tech.plot(fullDays, prices, 'b-', linewidth=2, label='Price')
 
-    # Color background based on P&L
+    # Color background based on P&L excluding comissions
     for i in range(len(pnl)):
         if i < len(pnl):
-            if pnl[i] > 0:
+            if pnl[i] > 0.0001:
                 color = 'green'
                 ax_tech.axvspan(start_day+i-2, start_day+i-1, alpha=0.1, color=color)
-            elif pnl[i] < 0:
+            elif pnl[i] < -0.0001:
                 color = 'red'
                 ax_tech.axvspan(start_day+i-2, start_day+i-1, alpha=0.1, color=color)
 
@@ -217,12 +221,12 @@ def plot_single_instrument_analysis(instrument_id,
         ema_30 = pd.Series(prices).ewm(span=30).mean()
         sma_of_ema = pd.Series(ema_30).rolling(4).mean()
         sma_of_ema = sma_of_ema.values
-        ax_tech.plot(range(len(sma_of_ema)), sma_of_ema, 'orange', label='30-day EMA', linewidth=2)
+        ax_tech.plot(range(len(sma_of_ema)), sma_of_ema, 'orange', label='4-day SMA of 30-day EMA', linewidth=2)
 
     # Add smooth predictions and bounds:
     smooth_predictions = []
     for i in range(0, start_day + len(positions)):
-        smooth_predictions.append(smooth_trend_regression(prices[:i+1],long_window=200,smooth_window=20))
+        smooth_predictions.append(smooth_trend_regression(prices[:i+1],long_window=200,smooth_window=5))
 
     if 'smooth_predictions' in locals() and len(smooth_predictions) > 0:
         pred_days = days[:len(smooth_predictions)]
@@ -250,14 +254,58 @@ def plot_single_instrument_analysis(instrument_id,
         smoother_predictions = pd.Series(smooth_predictions).ewm(span=4).mean()
         smoother_predictions = smoother_predictions.values
 
-        ax_tech.plot(range(len(ema_4_of_sma_10)), ema_4_of_sma_10, 'cyan', label='EMA of SMA', linewidth=2)
-        ax_tech.plot(range(len(sma_30)), sma_30, 'purple', label='SMA 30', linewidth=2)
+        ax_tech.plot(range(len(ema_4_of_sma_10)), ema_4_of_sma_10, 'cyan', label='4-day EMA of 30-day SMA', linewidth=2)
+        ax_tech.plot(range(len(sma_30)), sma_30, 'purple', label='30-day SMA', linewidth=2)
 
         # ax_tech.plot(range(len(ema_of_sma)), ema_of_sma, 'grey', label='ema_of_sma', linewidth=2)
 
-        ax_tech.plot(range(len(smoother_predictions)), smoother_predictions, 'grey', label='smoothed smooth predictions', linewidth=2)
+        ax_tech.plot(range(len(smoother_predictions)), smoother_predictions, 'grey', label='4-day EMA of Smooth Predictions', linewidth=2)
 
 
+
+
+    def calculate_macd(prices, fast=12, slow=26, signal=9):
+        """Calculate MACD line, signal line, and histogram"""
+        import pandas as pd
+        
+        prices_series = pd.Series(prices)
+        
+        # Calculate EMAs
+        ema_fast = prices_series.ewm(span=fast).mean()
+        ema_slow = prices_series.ewm(span=slow).mean()
+        
+        # MACD line = fast EMA - slow EMA
+        macd_line = ema_fast - ema_slow
+        
+        # Signal line = EMA of MACD line
+        signal_line = macd_line.ewm(span=signal).mean()
+        
+        # Histogram = MACD - Signal
+        histogram = macd_line - signal_line
+        
+        return macd_line, signal_line, histogram
+
+    # Calculate MACD
+    macd_line, signal_line, histogram = calculate_macd(prices)
+
+    # Plot MACD
+    macd_days = range(len(macd_line))
+    ax_macd.plot(macd_days, macd_line, 'blue', label='MACD Line', linewidth=1.5)
+    ax_macd.plot(macd_days, signal_line, 'red', label='Signal Line', linewidth=1.5)
+
+    # Plot histogram as bars
+    colors = ['green' if h >= 0 else 'red' for h in histogram]
+    ax_macd.bar(macd_days, histogram, color=colors, alpha=0.3, label='Histogram')
+
+    # Add zero line
+    ax_macd.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+
+    # MACD subplot formatting
+    ax_macd.set_title('MACD (12, 26, 9)')
+    ax_macd.set_xlabel('Days')
+    ax_macd.set_ylabel('MACD')
+    ax_macd.legend(loc='upper left')
+    ax_macd.grid(True, alpha=0.3)
 
 
     ax_tech.set_title('Stock Price with Technical Indicators & P&L Overlay')
@@ -276,7 +324,7 @@ def plot_single_instrument_analysis(instrument_id,
     print(f"Worst Day: ${min(pnl):.2f}")
 
     plt.tight_layout()
-    plt.show()
+    
 
 
 def analyze_winners_losers(instrument_PL_history, n=5):
@@ -312,9 +360,20 @@ def analyze_winners_losers(instrument_PL_history, n=5):
     return biggest_winners, biggest_losers
 
 
+def get_average_price(allPrices):
+    averages = []
+    for day in range(len(allPrices[0])):
+        todaySum = 0
+        for price in allPrices:
+            todaySum += price[day]
+        todayAverage = todaySum/len(allPrices)
+        averages.append(todayAverage)
+    return averages
+
+
 # Calculate test period (80% to 100% of data)
 total_days = nt
-test_start = int(total_days * 0.5)
+test_start = int(total_days * 0.8)  
 test_days = total_days - test_start
 
 print(f"Total days in dataset: {total_days}")
@@ -324,7 +383,7 @@ print(f"Using final 20% of data for evaluation")
 # Use test data for evaluation
 # calcPL will evaluate on the LAST test_days of the provided price data (final 20%)
 print(prcAll)
-(meanpl, ret, plstd, sharpe, dvol,instrument_position_history,dvolume_history,instrument_PL_history,instrument_value_history,instrument_cash_history,instrument_comm_history) = calcPL(prcAll, test_days)
+(meanpl, ret, plstd, sharpe, dvol,instrument_position_history,dvolume_history,instrument_PL_history,instrument_value_history,instrument_cash_history,instrument_comm_history,instrument_PL_history_no_comm) = calcPL(prcAll, test_days)
     
 winners, losers = analyze_winners_losers(instrument_PL_history, n=10)    
 
@@ -337,5 +396,20 @@ print ("annSharpe(PL): %.2lf " % sharpe)
 print ("totDvolume: %.0lf " % dvol)
 print ("Score: %.2lf" % score)
 
-stockID =35
-plot_single_instrument_analysis(stockID, instrument_position_history, dvolume_history, instrument_PL_history, instrument_value_history,instrument_cash_history, instrument_comm_history,prcAll, start_day=test_start)
+#Note that PL is shown without comission fees deducted                                                  vvvvvvv
+stockID = 10
+plot_single_instrument_analysis(stockID, instrument_position_history, dvolume_history, instrument_PL_history_no_comm, instrument_value_history,instrument_cash_history, instrument_comm_history,prcAll, start_day=test_start)
+
+
+
+averages = get_average_price(prcAll)
+plt.figure(100)
+plt.plot(range(len(averages)),averages,label="Average") 
+plt.title("Average") 
+
+prcAllButOne = np.delete(prcAll, stockID, axis=0)
+averagesAllButOne = get_average_price(prcAllButOne)
+plt.plot(range(len(averagesAllButOne)),averagesAllButOne,label=f"Average without instrument{stockID}") 
+plt.legend()
+
+plt.show()
