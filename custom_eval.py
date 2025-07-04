@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from main import alwaysBuy as getPosition
+from main import getMyPosition as getPosition
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 
