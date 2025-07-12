@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from main import getMyPosition as getPosition
+from bollinger_reversion import getMyPosition as getPosition
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 
@@ -105,7 +105,6 @@ def smooth_trend_regression(values, long_window=200, smooth_window=20):
     next_trend = long_trend.predict([[len(values)]])[0]
     return next_trend + smoothed_residual
 
-
 def plot_single_instrument_analysis(instrument_id, 
                                   instrument_position_history,
                                   dvolume_history, 
@@ -172,15 +171,67 @@ def plot_single_instrument_analysis(instrument_id,
         return np.array(trend_values)
     
     def calculate_bollinger_bands(prices, period=20, std_dev=2):
-        """Calculate Bollinger Bands"""
-        df = pd.DataFrame({'price': prices})
-        rolling_mean = df['price'].rolling(window=period).mean()
-        rolling_std = df['price'].rolling(window=period).std()
+        """Calculate Bollinger Bands using smoothed regression curve (user's method)"""
+        from sklearn.linear_model import LinearRegression
         
-        upper_band = rolling_mean + (rolling_std * std_dev)
-        lower_band = rolling_mean - (rolling_std * std_dev)
+        def smooth_trend_regression(values, long_window=200, smooth_window=20):
+            # Step 1: Get long-term trend using all data
+            X_all = np.arange(len(values)).reshape(-1, 1)
+            long_trend = LinearRegression().fit(X_all, values)
+            
+            # Step 2: Smooth recent residuals
+            trend_line = long_trend.predict(X_all)
+            residuals = values - trend_line
+            recent_residuals = residuals[-smooth_window:]
+            smoothed_residual = np.mean(recent_residuals)
+            
+            # Combine: long trend + smoothed recent deviation
+            next_trend = long_trend.predict([[len(values)]])[0]
+            return next_trend + smoothed_residual
         
-        return rolling_mean.values, upper_band.values, lower_band.values
+        if len(prices) < 60:  # Need minimum data
+            return np.full(len(prices), np.nan), np.full(len(prices), np.nan), np.full(len(prices), np.nan)
+        
+        bb_middle = []
+        bb_upper = []
+        bb_lower = []
+        
+        for i in range(len(prices)):
+            if i < 60:  # Need minimum data for calculation
+                bb_middle.append(np.nan)
+                bb_upper.append(np.nan)
+                bb_lower.append(np.nan)
+            else:
+                # Get data up to current point
+                price_slice = prices[:i+1]
+                
+                # Calculate smoothed regression middle line using your method
+                # Using original parameters: 60 days as long_window and 5 days as smooth_window
+                smoothed_middle = smooth_trend_regression(price_slice, long_window=min(len(price_slice), 60), smooth_window=5)
+                
+                # Calculate standard deviation around regression for volatility
+                # Use last 'period' points for volatility calculation
+                vol_start = max(0, i + 1 - period)
+                vol_prices = prices[vol_start:i+1]
+                
+                if len(vol_prices) >= period:
+                    # Calculate regression line for volatility window
+                    X_vol = np.arange(len(vol_prices)).reshape(-1, 1)
+                    vol_trend = LinearRegression().fit(X_vol, vol_prices)
+                    vol_trend_line = vol_trend.predict(X_vol)
+                    vol_residuals = vol_prices - vol_trend_line
+                    
+                    # Standard deviation of residuals around regression line
+                    vol_std = np.std(vol_residuals)
+                else:
+                    vol_std = np.std(vol_prices)
+                
+                # Create Bollinger Bands
+                bb_middle.append(smoothed_middle)
+                bb_upper.append(smoothed_middle + (vol_std * std_dev))
+                bb_lower.append(smoothed_middle - (vol_std * std_dev))
+        
+        return np.array(bb_middle), np.array(bb_upper), np.array(bb_lower)
     
     def calculate_rsi_series(prices, period=14):
         """Calculate RSI for entire series"""
@@ -192,17 +243,79 @@ def plot_single_instrument_analysis(instrument_id,
         rsi = 100 - (100 / (1 + rs))
         return rsi.values
     
-    def calculate_rsi_moving_average(rsi_values, ma_period=30):
-        """Calculate moving average of RSI values"""
-        df = pd.DataFrame({'rsi': rsi_values})
-        rsi_ma = df['rsi'].rolling(window=ma_period).mean()
-        return rsi_ma.values
+    def calculate_rsi_smoothed_regression(rsi_values, long_window=50, smooth_window=15):
+        """Calculate smoothed regression of RSI values using the same method with more smoothing"""
+        from sklearn.linear_model import LinearRegression
+        
+        def smooth_trend_regression(values, long_window=200, smooth_window=20):
+            # Step 1: Get long-term trend using all data
+            X_all = np.arange(len(values)).reshape(-1, 1)
+            long_trend = LinearRegression().fit(X_all, values)
+            
+            # Step 2: Smooth recent residuals (larger window for more smoothing)
+            trend_line = long_trend.predict(X_all)
+            residuals = values - trend_line
+            recent_residuals = residuals[-smooth_window:]
+            smoothed_residual = np.mean(recent_residuals)
+            
+            # Combine: long trend + smoothed recent deviation
+            next_trend = long_trend.predict([[len(values)]])[0]
+            return next_trend + smoothed_residual
+        
+        rsi_regression = []
+        
+        for i in range(len(rsi_values)):
+            if i < long_window or np.isnan(rsi_values[i]):
+                rsi_regression.append(np.nan)
+            else:
+                # Get RSI data up to current point, excluding NaN values
+                rsi_slice = rsi_values[:i+1]
+                valid_rsi = rsi_slice[~np.isnan(rsi_slice)]
+                
+                if len(valid_rsi) >= long_window:
+                    smoothed_rsi = smooth_trend_regression(valid_rsi, long_window=min(len(valid_rsi), long_window), smooth_window=smooth_window)
+                    rsi_regression.append(smoothed_rsi)
+                else:
+                    rsi_regression.append(np.nan)
+        
+        return np.array(rsi_regression)
     
-    def calculate_trend_strength_moving_average(trend_values, ma_period=30):
-        """Calculate moving average of trend strength values"""
-        df = pd.DataFrame({'trend': trend_values})
-        trend_ma = df['trend'].rolling(window=ma_period).mean()
-        return trend_ma.values
+    def calculate_trend_strength_smoothed_regression(trend_values, long_window=50, smooth_window=15):
+        """Calculate smoothed regression of trend strength values using the same method with more smoothing"""
+        from sklearn.linear_model import LinearRegression
+        
+        def smooth_trend_regression(values, long_window=200, smooth_window=20):
+            # Step 1: Get long-term trend using all data
+            X_all = np.arange(len(values)).reshape(-1, 1)
+            long_trend = LinearRegression().fit(X_all, values)
+            
+            # Step 2: Smooth recent residuals (larger window for more smoothing)
+            trend_line = long_trend.predict(X_all)
+            residuals = values - trend_line
+            recent_residuals = residuals[-smooth_window:]
+            smoothed_residual = np.mean(recent_residuals)
+            
+            # Combine: long trend + smoothed recent deviation
+            next_trend = long_trend.predict([[len(values)]])[0]
+            return next_trend + smoothed_residual
+        
+        trend_regression = []
+        
+        for i in range(len(trend_values)):
+            if i < long_window or np.isnan(trend_values[i]):
+                trend_regression.append(np.nan)
+            else:
+                # Get trend strength data up to current point, excluding NaN values
+                trend_slice = trend_values[:i+1]
+                valid_trend = trend_slice[~np.isnan(trend_slice)]
+                
+                if len(valid_trend) >= long_window:
+                    smoothed_trend = smooth_trend_regression(valid_trend, long_window=min(len(valid_trend), long_window), smooth_window=smooth_window)
+                    trend_regression.append(smoothed_trend)
+                else:
+                    trend_regression.append(np.nan)
+        
+        return np.array(trend_regression)
     
     def calculate_support_resistance(prices, lookback=20):
         """Calculate support and resistance levels"""
@@ -320,10 +433,10 @@ def plot_single_instrument_analysis(instrument_id,
     fast_ma = calculate_moving_average_series(prices, params["fast_ma"])
     slow_ma = calculate_moving_average_series(prices, params["slow_ma"])
     trend_strength = calculate_trend_strength_series(prices, params["trend_strength"])
-    trend_strength_ma = calculate_trend_strength_moving_average(trend_strength, 30)  # 30-day trend strength MA
+    trend_strength_regression = calculate_trend_strength_smoothed_regression(trend_strength, 50, 15)  # More smoothing
     bb_middle, bb_upper, bb_lower = calculate_bollinger_bands(prices, 20, 2)
     rsi = calculate_rsi_series(prices, 14)
-    rsi_ma = calculate_rsi_moving_average(rsi, 30)  # 30-day RSI moving average
+    rsi_regression = calculate_rsi_smoothed_regression(rsi, 50, 15)  # More smoothing
     support, resistance = calculate_support_resistance(prices, params["breakout_lookback"])
     buy_signals, sell_signals = detect_trading_signals(prices, params)
     
@@ -414,10 +527,10 @@ def plot_single_instrument_analysis(instrument_id,
     ax_main.plot(np.array(fullDays)[valid_slow], slow_ma[valid_slow], 
                 'red', label=f'Slow MA ({params["slow_ma"]})', linewidth=2)
 
-    # Bollinger Bands - solid lines for better visibility
+    # Bollinger Bands - solid lines using smoothed regression
     valid_bb = ~np.isnan(bb_middle)
     ax_main.plot(np.array(fullDays)[valid_bb], bb_middle[valid_bb], 
-                'gray', label='BB Middle (20)', linewidth=1.5, linestyle='-')
+                'gray', label='BB Middle (Regression)', linewidth=1.5, linestyle='-')
     ax_main.plot(np.array(fullDays)[valid_bb], bb_upper[valid_bb], 
                 'orange', label='BB Upper (2σ)', linewidth=1.5, linestyle='-')
     ax_main.plot(np.array(fullDays)[valid_bb], bb_lower[valid_bb], 
@@ -447,14 +560,14 @@ def plot_single_instrument_analysis(instrument_id,
     ax_main.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     ax_main.grid(True, alpha=0.3)
 
-    # Trend Strength subplot with 30-day moving average
+    # Trend Strength subplot with smoothed regression
     valid_trend = ~np.isnan(trend_strength)
-    valid_trend_ma = ~np.isnan(trend_strength_ma)
+    valid_trend_regression = ~np.isnan(trend_strength_regression)
     
     ax_trend.plot(np.array(fullDays)[valid_trend], trend_strength[valid_trend], 
                  'purple', linewidth=2, label=f'Trend Strength ({params["trend_strength"]}d)')
-    ax_trend.plot(np.array(fullDays)[valid_trend_ma], trend_strength_ma[valid_trend_ma], 
-                 'darkblue', linewidth=2, label='Trend Strength MA (30)', linestyle='--')
+    ax_trend.plot(np.array(fullDays)[valid_trend_regression], trend_strength_regression[valid_trend_regression], 
+                 'darkblue', linewidth=2, label='Trend Strength Regression (50d)', linestyle='--')
     
     ax_trend.axhline(y=params["trend_threshold"]*100, color='green', linestyle='--', alpha=0.7, 
                     label=f'Threshold (+{params["trend_threshold"]*100:.1f}%)')
@@ -468,18 +581,18 @@ def plot_single_instrument_analysis(instrument_id,
     for sell_day in sell_signals:
         ax_trend.axvspan(sell_day-0.5, sell_day+0.5, color='darkred', alpha=0.15)
     
-    ax_trend.set_title('Trend Strength with 30-day Moving Average')
+    ax_trend.set_title('Trend Strength with Smoothed Regression')
     ax_trend.set_ylabel('Trend %')
     ax_trend.legend()
     ax_trend.grid(True, alpha=0.3)
 
-    # Enhanced RSI subplot with 30-day moving average
+    # Enhanced RSI subplot with smoothed regression
     valid_rsi = ~np.isnan(rsi)
-    valid_rsi_ma = ~np.isnan(rsi_ma)
+    valid_rsi_regression = ~np.isnan(rsi_regression)
     
     ax_rsi.plot(np.array(fullDays)[valid_rsi], rsi[valid_rsi], 'purple', linewidth=2, label='RSI (14)')
-    ax_rsi.plot(np.array(fullDays)[valid_rsi_ma], rsi_ma[valid_rsi_ma], 'darkblue', linewidth=2, 
-               label='RSI MA (30)', linestyle='--')
+    ax_rsi.plot(np.array(fullDays)[valid_rsi_regression], rsi_regression[valid_rsi_regression], 'darkblue', linewidth=2, 
+               label='RSI Regression (50d)', linestyle='--')
     
     ax_rsi.axhline(y=70, color='red', linestyle='--', alpha=0.7, label='Overbought (70)')
     ax_rsi.axhline(y=30, color='green', linestyle='--', alpha=0.7, label='Oversold (30)')
@@ -492,7 +605,7 @@ def plot_single_instrument_analysis(instrument_id,
     for sell_day in sell_signals:
         ax_rsi.axvspan(sell_day-0.5, sell_day+0.5, color='darkred', alpha=0.15)
     
-    ax_rsi.set_title('RSI with 30-day Moving Average')
+    ax_rsi.set_title('RSI with Smoothed Regression')
     ax_rsi.set_xlabel('Days')
     ax_rsi.set_ylabel('RSI')
     ax_rsi.set_ylim(0, 100)
@@ -511,8 +624,9 @@ def plot_single_instrument_analysis(instrument_id,
     print(f"Stop Loss: {params['stop_loss_pct']*100:.1f}%")
     print(f"Min Hold Period: {params['min_trend_duration']} days")
     print(f"Breakout Lookback: {params['breakout_lookback']} days")
-    print(f"RSI MA Period: 30 days")
-    print(f"Trend Strength MA Period: 30 days")
+    print(f"RSI Regression: 50d window, 15d smoothing")
+    print(f"Trend Strength Regression: 50d window, 15d smoothing")
+    print(f"Bollinger Bands: Regression-based (60d window, 5d smoothing)")
     print(f"Total Commissions: ${sum(commissions):.2f}")
     print(f"Win Rate: {(np.array(pnl) > 0).sum() / len(pnl) * 100:.1f}%")
     print(f"Best Day: ${max(pnl):.2f}")
@@ -591,7 +705,7 @@ print ("totDvolume: %.0lf " % dvol)
 print ("Score: %.2lf" % score)
 
 #Note that PL is shown without comission fees deducted                                                  vvvvvvv
-stockID = 3
+stockID = 41
 plot_single_instrument_analysis(stockID, instrument_position_history, dvolume_history, instrument_PL_history_no_comm, instrument_value_history,instrument_cash_history, instrument_comm_history,prcAll, start_day=test_start)
 
 
